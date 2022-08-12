@@ -1,7 +1,7 @@
 struct Jwt<'a, F>
-  where F: Fn() -> &'a String
+  where F: Fn() -> Option<&'a String>
 {
-  jwt: &'a String,
+  jwt: Option<&'a String>,
   exp: u64,
   refresh_function: F
 }
@@ -11,7 +11,7 @@ trait JwtCache {
 }
 
 impl<'a, F> JwtCache for Jwt<'a, F>
-  where F: Fn() -> &'a String
+  where F: Fn() -> Option<&'a String>
 {
   fn refresh(&mut self) {
     self.jwt = (self.refresh_function)();
@@ -36,16 +36,16 @@ mod tests {
     let expected_exp: u64 =  SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
     let mut jwt_cache = Jwt {
-      jwt: &"".to_string(),
+      jwt: None,
       exp: expected_exp,
-      refresh_function: || &expected_jwt
+      refresh_function: || Some(&expected_jwt)
     };
 
-    assert_ne!(jwt_cache.jwt, &expected_jwt);
+    assert!(jwt_cache.jwt.is_none());
 
     jwt_cache.refresh();
 
-    assert_eq!(jwt_cache.jwt, &expected_jwt);
+    assert_eq!(jwt_cache.jwt.unwrap(), &expected_jwt);
     assert_eq!(jwt_cache.exp, expected_exp);
   }
 }
