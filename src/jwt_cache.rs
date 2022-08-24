@@ -23,8 +23,6 @@ impl<F> JwtCache<F>
     self.jwt = (self.refresh_function)();
 
     let claims = decode::<JwtClaims>(&self.jwt.as_ref().unwrap(), &self.decoding_key, &self.validation);
-
-    let claims_unwrapped = &claims.as_ref().unwrap().claims;
     self.exp = claims.unwrap().claims.exp;
   }
 
@@ -71,6 +69,22 @@ mod tests {
   use serde::{Serialize, Deserialize};
   use super::JwtCache;
 
+  // Test JWT:
+  //  {
+  //   "iss": "Online JWT Builder",
+  //   "iat": 1660520523,
+  //   "exp": 1660520525,
+  //   "aud": "www.example.com",
+  //   "sub": "jrocket@example.com",
+  //   "GivenName": "Johnny",
+  //   "Surname": "Rocket",
+  //   "Email": "jrocket@example.com",
+  //   "Role": [
+  //       "Manager",
+  //       "Project Administrator"
+  //   ]
+  //  }
+
   #[derive(Debug, Serialize, Deserialize)]
   struct Claims {
     iss: String,
@@ -83,19 +97,6 @@ mod tests {
     email: String,
     role: Vec<String>
   }
-
-  // "iss": "Online JWT Builder",
-  //   "iat": 1660520523,
-  //   "exp": 1660520525,
-  //   "aud": "www.example.com",
-  //   "sub": "jrocket@example.com",
-  //   "GivenName": "Johnny",
-  //   "Surname": "Rocket",
-  //   "Email": "jrocket@example.com",
-  //   "Role": [
-  //       "Manager",
-  //       "Project Administrator"
-  //   ]
 
   #[test]
   fn default_check() {

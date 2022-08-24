@@ -28,7 +28,7 @@ pub fn get_test_jwt(expired: bool) -> (String, Vec<u8>) {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TestClaims {
-  exp: u64,
-  sub: String,
-  email: String
+  pub exp: u64,
+  pub sub: String,
+  pub email: String
 }
