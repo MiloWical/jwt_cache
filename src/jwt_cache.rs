@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 use jsonwebtoken::{decode, get_current_timestamp, Validation, DecodingKey};
 
-pub struct JwtCache<'a, F>
-  where F: Fn() -> Option<&'a String>
+pub struct JwtCache<F>
+  where F: Fn() -> Option<String>
 {
-  jwt: Option<&'a String>,
+  jwt: Option<String>,
   exp: u64,
   refresh_function: F,
   validation: Validation,
@@ -16,25 +16,25 @@ struct JwtClaims {
   exp: u64
 }
 
-impl<'a, F> JwtCache<'a, F>
-  where F: Fn() -> Option<&'a String>
+impl<F> JwtCache<F>
+  where F: Fn() -> Option<String>
 {
   fn refresh(&mut self) {
     self.jwt = (self.refresh_function)();
 
-    let claims = decode::<JwtClaims>(&self.jwt.unwrap(), &self.decoding_key, &self.validation);
+    let claims = decode::<JwtClaims>(&self.jwt.as_ref().unwrap(), &self.decoding_key, &self.validation);
 
     let claims_unwrapped = &claims.as_ref().unwrap().claims;
     self.exp = claims.unwrap().claims.exp;
   }
 
-  pub fn jwt(&mut self) -> Option<&'a String> {
+  pub fn jwt(&mut self) -> Option<String> {
     
     if self.exp <= get_current_timestamp() {
       self.refresh();
     }
 
-    self.jwt
+    self.jwt.to_owned()
   }
 
   pub fn new(refresh_function: F) -> Self { 
@@ -67,9 +67,8 @@ impl<'a, F> JwtCache<'a, F>
 #[cfg(test)]
 mod tests {
 
-  use jsonwebtoken::{Validation, Algorithm, DecodingKey};
+  use jsonwebtoken::{get_current_timestamp, Validation, Algorithm, DecodingKey};
   use serde::{Serialize, Deserialize};
-  use std::time::{SystemTime, UNIX_EPOCH};
   use super::JwtCache;
 
   #[derive(Debug, Serialize, Deserialize)]
@@ -99,18 +98,51 @@ mod tests {
   //   ]
 
   #[test]
-  fn insecure_check() {
+  fn default_check() {
+    let jwt_cache = JwtCache::new(|| {
+      Some("".to_string())
+    });
+
+    assert!(jwt_cache.jwt.is_none());
+    assert_eq!(jwt_cache.exp, 0);
+  }
+
+  #[test]
+  fn insecure_decode_check() {
     let expected_jwt: String = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJPbmxpbmUgSldUIEJ1aWxkZXIiLCJpYXQiOjE2NjA1MjA1MjMsImV4cCI6MTY2MDUyMDUyNSwiYXVkIjoid3d3LmV4YW1wbGUuY29tIiwic3ViIjoianJvY2tldEBleGFtcGxlLmNvbSIsIkdpdmVuTmFtZSI6IkpvaG5ueSIsIlN1cm5hbWUiOiJSb2NrZXQiLCJFbWFpbCI6Impyb2NrZXRAZXhhbXBsZS5jb20iLCJSb2xlIjpbIk1hbmFnZXIiLCJQcm9qZWN0IEFkbWluaXN0cmF0b3IiXX0.1SVid882Q7Y9jxbS40mfmIGs42hmUPCTyqkFP6b9J3s".to_string();
     let expected_exp: u64 = 1660520525;
 
     let mut jwt_cache = JwtCache::new(|| {
-      Some(&expected_jwt)
+      Some(expected_jwt.clone())
     });
 
     assert!(jwt_cache.jwt.is_none());
     assert_eq!(jwt_cache.exp, 0);
 
-    assert_eq!(jwt_cache.jwt().unwrap(), &expected_jwt);
+    assert_eq!(jwt_cache.jwt().unwrap(), expected_jwt);
+    assert_eq!(jwt_cache.exp, expected_exp);
+  }
+
+  #[test]
+  fn multiple_call_check() {
+    let expected_jwt: String = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJPbmxpbmUgSldUIEJ1aWxkZXIiLCJpYXQiOjE2NjA1MjA1MjMsImV4cCI6MTY2MDUyMDUyNSwiYXVkIjoid3d3LmV4YW1wbGUuY29tIiwic3ViIjoianJvY2tldEBleGFtcGxlLmNvbSIsIkdpdmVuTmFtZSI6IkpvaG5ueSIsIlN1cm5hbWUiOiJSb2NrZXQiLCJFbWFpbCI6Impyb2NrZXRAZXhhbXBsZS5jb20iLCJSb2xlIjpbIk1hbmFnZXIiLCJQcm9qZWN0IEFkbWluaXN0cmF0b3IiXX0.1SVid882Q7Y9jxbS40mfmIGs42hmUPCTyqkFP6b9J3s".to_string();
+    let expected_exp: u64 = 1660520525;
+
+    let mut jwt_cache = JwtCache::new(|| {
+      Some(expected_jwt.clone())
+    });
+
+    assert!(jwt_cache.jwt.is_none());
+    assert_eq!(jwt_cache.exp, 0);
+
+    // First load
+    jwt_cache.jwt();
+
+    assert!(jwt_cache.jwt.is_some());
+    assert!(jwt_cache.exp <= get_current_timestamp());
+
+    // Second load
+    assert_eq!(jwt_cache.jwt().unwrap(), expected_jwt);
     assert_eq!(jwt_cache.exp, expected_exp);
   }
 
@@ -118,11 +150,10 @@ mod tests {
   fn validation_check() {
     let expected_jwt: String = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJPbmxpbmUgSldUIEJ1aWxkZXIiLCJpYXQiOjE2NjA1MjA1MjMsImV4cCI6MTY2MDUyMDUyNSwiYXVkIjoid3d3LmV4YW1wbGUuY29tIiwic3ViIjoianJvY2tldEBleGFtcGxlLmNvbSIsIkdpdmVuTmFtZSI6IkpvaG5ueSIsIlN1cm5hbWUiOiJSb2NrZXQiLCJFbWFpbCI6Impyb2NrZXRAZXhhbXBsZS5jb20iLCJSb2xlIjpbIk1hbmFnZXIiLCJQcm9qZWN0IEFkbWluaXN0cmF0b3IiXX0.1SVid882Q7Y9jxbS40mfmIGs42hmUPCTyqkFP6b9J3s".to_string();
     let decoding_key_string: &[u8] = b"qwertyuiopasdfghjklzxcvbnm123456";
-    //let expected_exp: u64 =  SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
     let expected_exp: u64 = 1660520525;
 
     let mut jwt_cache = JwtCache::new(|| {
-      Some(&expected_jwt)
+      Some(expected_jwt.clone())
     });
 
     assert!(jwt_cache.jwt.is_none());
@@ -134,7 +165,7 @@ mod tests {
 
     jwt_cache.set_validation_and_decoding_key(validation, decoding_key);
 
-    assert_eq!(jwt_cache.jwt().unwrap(), &expected_jwt);
+    assert_eq!(jwt_cache.jwt().unwrap(), expected_jwt);
     assert_eq!(jwt_cache.exp, expected_exp);
   }
 }

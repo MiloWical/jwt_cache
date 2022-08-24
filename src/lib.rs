@@ -1,3 +1,3 @@
-mod jwt_cache_internal;
+mod jwt_cache;
 
-pub use jwt_cache_internal::{JwtCache};
+pub use crate::jwt_cache::*;
